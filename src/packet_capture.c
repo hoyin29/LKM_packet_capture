@@ -9,7 +9,7 @@ static struct nf_hook_ops nfho;  //struct holding set of hook function options
 //function to be called by hook
 unsigned int hook_func(unsigned int hooknum, struct sk_buff **skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
 {
-  printk(KERN_INFO "packet received from interface - (%s , %lu)\n", in->name, in->dev_addr);  //log to var/log/messages
+  printk(KERN_INFO "packet received from interface - %s\n", in->name);  //log to dmesg
   printk(KERN_INFO "packet sent from interface - %s\n", out->name);  
   return NF_ACCEPT;  //accepts the packet        
 }
