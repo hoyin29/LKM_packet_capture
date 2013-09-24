@@ -5,3 +5,7 @@ all:
 	make -C /lib/modules/$(KVERSION)/build M=$(PWD) modules
 clean:
 	make -C /lib/modules/$(KVERSION)/build M=$(PWD) clean
+install:
+	insmod packet_capture.ko
+uninstall:
+	rmmod packet_capture
