@@ -6,6 +6,18 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <net/ip.h>
+#include <linux/init.h>
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Patrick Conner, Ho Yin Pun");
+
+
+/* PARAMS */
+static char *iface = "eth0";
+static int run_time = 150;
+module_param(iface, charp, 0);
+module_param(run_time, int, 0 );
+
+
 
 
 #define GROWTH_FACTOR 0.64
@@ -30,6 +42,8 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 	const struct net_device *outdev, 
 	int (*okfn)(struct sk_buff *))
 {
+	
+
 	struct iphdr *ip_header = (struct iphdr *)skb_network_header(pskb);
 	/*
 	if(ip_header == NULL)
@@ -61,7 +75,8 @@ int init_module()
 	nfho.pf = PF_INET;  //IPV4 packets
 	nfho.priority = NF_IP_PRI_FIRST;  //set to highest priority over all other hook functions
 	nf_register_hook(&nfho);  //register hook
-	return 0;  //return 0 for success
+	printk("Running on interface %s for %ds\n", iface, run_time);
+	return 0;  //return 0 for successi
 }
 
 //Called when module unloaded using 'rmmod'
