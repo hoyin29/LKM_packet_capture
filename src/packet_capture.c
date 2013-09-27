@@ -20,8 +20,9 @@ module_param(run_time, int, 0 );
 
 
 
-#define GROWTH_FACTOR 0.64
+const float GROWTH_FACTOR = 0.75;
 static int array_size, item_count;
+
 typedef struct map
 {
 	unsigned int dst;
@@ -31,7 +32,7 @@ typedef struct map
 static struct nf_hook_ops nfho;  //struct holding set of hook function options
 
 static map_t** map;
-void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip);
+void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip, int set_count);
 void dstlookup(unsigned int dstip);
 int get_count(unsigned int dstip);
 void free_hash();
@@ -66,7 +67,7 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 //Called when module loaded using 'insmod'
 int init_module()
 {
-	array_size = 5;
+	array_size = 13;
 	item_count = 0;
 	map = vmalloc(sizeof(map_t*)*array_size);
   
@@ -104,7 +105,7 @@ int get_count(unsigned int dstip)
   	{
 		index++;
 		if(index == array_size) index = 0;
-    		if(!map[index]) return -1;
+    		if(map[index]==NULL) return -1;
     
   	}
 	return map[index]->count;
@@ -112,18 +113,18 @@ int get_count(unsigned int dstip)
 
 void dstlookup(unsigned int dstip)
 {
-	insert_map(map, &array_size, &item_count, dstip);
+	insert_map(map, &array_size, &item_count, dstip,0);
 	float gf = (float)item_count/array_size;
 	if(gf >= GROWTH_FACTOR)
   	{
-		array_size >>= 1;
+		array_size *= 22;
 		map_t** newmap = vmalloc(sizeof(map_t*)*array_size);
 		int i;
     		int temp_item_ct = 0;
     		for(i = 0; i < array_size/2; i++)
 		{
         		if(map[i])
-	  			insert_map(newmap, &array_size, &temp_item_ct,map[i]->dst); 
+	  			insert_map(newmap, &array_size, &temp_item_ct,map[i]->dst,map[i]->count); 
     		}
     		vfree(map);
     		map = newmap;
@@ -131,9 +132,9 @@ void dstlookup(unsigned int dstip)
 }
 
 
-void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip)
+void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip, int set_count)
 {
-	int index = dstip % array_size;
+	int index = dstip % *size;
   
 	if(mp[index])
 	{
@@ -157,4 +158,5 @@ void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip)
     		mp[index]->count = 1;
     		*itemc++;
   	}
+	if(set_count !=0) mp[index]->count = set_count;
 }
