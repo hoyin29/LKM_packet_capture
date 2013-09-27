@@ -34,7 +34,7 @@ static map_t** map;
 void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip);
 void dstlookup(unsigned int dstip);
 int get_count(unsigned int dstip);
-
+void free_hash();
 
 static unsigned int packet_interceptor_hook(unsigned int hook, 
 	struct sk_buff *pskb, 
@@ -83,8 +83,19 @@ int init_module()
 void cleanup_module()
 {
 	nf_unregister_hook(&nfho);  //cleanup – unregister hook
+	free_hash();
 }
 
+
+void free_hash()
+{
+	//delete hash table stuff
+	for(int i = 0; i < array_size; i++)
+	{
+		vfree(map[i]);
+	}
+	vfree(map);
+}
 
 int get_count(unsigned int dstip)
 {
