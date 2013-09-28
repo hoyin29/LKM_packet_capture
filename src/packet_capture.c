@@ -84,10 +84,10 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 		return NF_ACCEPT;
 	}
 	
-	ip_header = (struct iphdr *)skb_network_header(pskb);
+ 	ip_header = (struct iphdr *)skb_network_header(pskb);
 	insert(hmap, hmap->container, ip_header->daddr);
-	
-	printk(KERN_INFO "Receive-Interface: %s   ---   SRC-IP: %pI4   ---   DST-IP: %pI4   ---   Packet-Count: %d\n", indev->name, &ip_header->saddr, &ip_header->daddr, get_value(hmap, ip_header->daddr));  
+        insert(hmap, hmap->container, ip_header->saddr);	
+	printk(KERN_INFO "Receive-Interface: %s   ---   SRC-IP: %pI4   ---   DST-IP: %pI4   ---   SRC-Count: %d   ---   DST-Count: %d\n", indev->name, &ip_header->saddr, &ip_header->daddr, get_value(hmap, ip_header->saddr), get_value(hmap, ip_header->daddr));  
 	
 	
 	/*
