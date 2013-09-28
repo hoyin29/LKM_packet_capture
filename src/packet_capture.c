@@ -12,12 +12,11 @@ MODULE_AUTHOR("Patrick Conner, Ho Yin Pun");
 
 
 /* PARAMS */
-/*
 static char *iface = "eth0";
 static int run_time = 150;
 module_param(iface, charp, 0);
 module_param(run_time, int, 0 );
-*/
+
 
 /*
 const float GROWTH_FACTOR = 0.75;
@@ -108,7 +107,7 @@ int init_module()
 	nfho.priority = NF_IP_PRI_FIRST;  //set to highest priority over all other hook functions
 	nf_register_hook(&nfho);  //register hook
 	
-	//printk(KERN_INFO "Running on interface %s for %ds\n", iface, run_time);
+	printk(KERN_INFO "Running on interface %s for %ds\n", iface, run_time);
 	return 0;  //return 0 for successi
 }
 
