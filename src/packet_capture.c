@@ -12,11 +12,12 @@ MODULE_AUTHOR("Patrick Conner, Ho Yin Pun");
 
 
 /* PARAMS */
+/*
 static char *iface = "eth0";
 static int run_time = 150;
 module_param(iface, charp, 0);
 module_param(run_time, int, 0 );
-
+*/
 
 /*
 const float GROWTH_FACTOR = 0.75;
@@ -78,9 +79,10 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 	
 	//dstlookup(ip_header->daddr);
 	printk(KERN_INFO "Receive-Interface: %s   ---   SRC-IP: %pI4   ---   DST-IP: %pI4   ---   Packet-Count: %d\n", indev->name, &ip_header->saddr, &ip_header->daddr, get_value(hmap, ip_header->daddr));  
-   
+
+	/*   
 	printk(KERN_INFO "Send-Interface: %s   ---   SRC-IP: %pI4   ---   DST-IP: %pI4   ---   Packet-Count: %d\n", outdev->name, &ip_header->saddr, &ip_header->daddr, get_value(hmap, ip_header->daddr));  
-   
+   	*/
 
 	printk(KERN_INFO "------------------------------------\n");
 
@@ -107,7 +109,7 @@ int init_module()
 	nfho.priority = NF_IP_PRI_FIRST;  //set to highest priority over all other hook functions
 	nf_register_hook(&nfho);  //register hook
 	
-	printk(KERN_INFO "Running on interface %s for %ds\n", iface, run_time);
+	//printk(KERN_INFO "Running on interface %s for %ds\n", iface, run_time);
 	return 0;  //return 0 for successi
 }
 
@@ -115,7 +117,7 @@ int init_module()
 void cleanup_module()
 {
 	nf_unregister_hook(&nfho);  //cleanup – unregister hook
-	//free_hash_map(hmap);
+	free_hash_map(hmap);
 }
 
 /*
@@ -196,21 +198,36 @@ void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip, int set_c
 
 void free_hash_map(hash_map_t* hmap)
 {
-    int i;
-    for(i = 0; i < hmap->map_size; ++i)
+    if(hmap)
     {
-	kfree(hmap->container[i]);
+    	int i;
+    	for(i = 0; i < hmap->map_size; ++i)
+    	{
+		if(hmap->container[i])
+		{
+			kfree(hmap->container[i]);
+		}
+    	}
+	if(hmap)
+	{
+		kfree(hmap);
+	}
     }
-    kfree(hmap);
 }
 
 void free_hash_container(hash_map_t* hmap, int size)
 {
-    int i;
-    for(i = 0; i < size; ++i)
-    {
-	kfree(hmap->container[i]);
-    }
+	if(hmap)
+	{	
+		int i;
+		for(i = 0; i < size; ++i)
+		{
+			if(hmap->container[i])
+			{
+				kfree(hmap->container[i]);
+			}
+		}
+	}		
 }
 
 void regrow(hash_map_t* hmap)
@@ -279,6 +296,11 @@ void insert(hash_map_t* hmap, hash_map_entry_t** container, unsigned int key)
 		      else
 		      {
 			  hmentry = kmalloc(sizeof(hash_map_entry_t), GFP_KERNEL);
+			  if(hmentry == NULL)
+			  {
+				printk(KERN_INFO "\t\t----------no memory to create new entry\n");
+				return; 
+			  }
 			  hmentry->key = key;
 			  hmentry->value = 1;
 			  container[index] = hmentry;
@@ -289,6 +311,11 @@ void insert(hash_map_t* hmap, hash_map_entry_t** container, unsigned int key)
 		  else
 		  {
 		      hmentry = kmalloc(sizeof(hash_map_entry_t), GFP_KERNEL);
+		      if(hmentry == NULL)
+                      {   
+                             printk(KERN_INFO "\t\t----------no memory to create new entry\n");
+                             return;
+                      }
 		      hmentry->key = key;
 		      hmentry->value = 1;
 		      container[index] = hmentry;
@@ -300,6 +327,11 @@ void insert(hash_map_t* hmap, hash_map_entry_t** container, unsigned int key)
 	  else
 	  {
 	      hmentry = kmalloc(sizeof(hash_map_entry_t), GFP_KERNEL);
+	      if(hmentry == NULL)
+              {   
+                     printk(KERN_INFO "\t\t----------no memory to create new entry\n");
+                     return;
+              }
 	      hmentry->key = key;
 	      hmentry->value = 1;
 	      container[index] = hmentry;
@@ -310,6 +342,11 @@ void insert(hash_map_t* hmap, hash_map_entry_t** container, unsigned int key)
     else
     {
 	hmentry = kmalloc(sizeof(hash_map_entry_t), GFP_KERNEL);
+	if(hmentry == NULL)
+        {   
+             printk(KERN_INFO "\t\t----------no memory to create new entry\n");
+             return;
+        }
 	hmentry->key = key;
 	hmentry->value = 1;
 	container[index] = hmentry;
