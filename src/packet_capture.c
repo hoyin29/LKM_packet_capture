@@ -120,16 +120,14 @@ void print_all(){
 
 	for(i = 0; i < GLOBAL_MAP_SIZE; i++){
 		if(global_map[i]){
-			/*
-			if(!hlist_empty(global_map[i])){
-				hlist_for_each_entry(h, n, global_map[i], node){
-					if(h)
-						printk("IP: %pI4 - count: %d", h->addr, h->count);
-					h = NULL;
-				}
+			
+			hlist_for_each(n, global_map[i]){
+				h = hlist_entry(n, hte_t, node);
+				if(h) printk("IP: %pI4 - count: %d\n", &h->addr, h->count);
+				
 			}
-			*/
-			printk("first ip - %d first count - %d\n", hlist_entry(global_map[i]->first, hte_t, node)->addr,hlist_entry(global_map[i]->first, hte_t, node)->count);
+			
+			//printk("first ip - %d first count - %d\n", hlist_entry(global_map[i]->first, hte_t, node)->addr,hlist_entry(global_map[i]->first, hte_t, node)->count);
 		}
 	}
 }
