@@ -7,68 +7,35 @@
 #include <linux/ip.h>
 #include <net/ip.h>
 #include <linux/init.h>
+#include <linux/hash.h>
+#include <linux/list.h>
+
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Patrick Conner, Ho Yin Pun");
 
 
 /* PARAMS */
-/*
 static char *iface = "eth0";
 static int run_time = 150;
 module_param(iface, charp, 0);
 module_param(run_time, int, 0 );
-*/
 
-/*
-const float GROWTH_FACTOR = 0.75;
-static int array_size, item_count;
+typedef struct hte{
+	unsigned int addr;
+	unsigned int count;
+	struct hlist_node node;
+} hte_t;
+hte_t* __make_hte(unsigned int addr, unsigned int count);
+void insert_ip(unsigned int ip);
 
-typedef struct map
-{
-	unsigned int dst;
-	int count; 
-} map_t;
-*/
-
-
-#define LOAD_FACTOR 0.75
-#define REGROW_FACTOR 2
-#define INITIAL_SIZE 10
-
-typedef struct hash_map_entry
-{
-    unsigned int key;
-    int value;
-} hash_map_entry_t;
-
-typedef struct hash_map
-{
-    int map_size;
-    int entry_count;
-    hash_map_entry_t** container;
-} hash_map_t;
-
-void free_hash_map(hash_map_t* hmap);
-void free_hash_container(hash_map_t* hmap, int size);
-void regrow(hash_map_t* hmap);
-void insert(hash_map_t* hmap, hash_map_entry_t** container, unsigned int key);
-int get_value(hash_map_t* hmap, unsigned int key);
-void print_hash_map(hash_map_t* hmap);
-
+void print_all(void);
 static struct nf_hook_ops nfho;  //struct holding set of hook function options
 
-/*
-static map_t** map;
-void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip, int set_count);
-void dstlookup(unsigned int dstip);
-int get_count(unsigned int dstip);
-void free_hash();
-*/
-
-static hash_map_t* hmap;
 static struct iphdr *ip_header;
-static int insert_count;
-static int call_count;
+
+#define GLOBAL_MAP_SIZE 1024
+struct hlist_head** global_map;
 
 static unsigned int packet_interceptor_hook(unsigned int hook, 
 	struct sk_buff *pskb, 
@@ -77,31 +44,9 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 	int (*okfn)(struct sk_buff *))
 {
 	
-	if(insert_count > 2000)
-	{
-		printk(KERN_INFO "(unprocess %d) Receive-Interface: %s   ---   SRC-IP: %pI4   ---   DST-IP: %pI4   ---   Packet-Count: %d\n", insert_count, indev->name, &ip_header->saddr, &ip_header->daddr, get_value(hmap, ip_header->daddr));  
-
-		return NF_ACCEPT;
-	}
-	
  	ip_header = (struct iphdr *)skb_network_header(pskb);
-	insert(hmap, hmap->container, ip_header->daddr);
-        insert(hmap, hmap->container, ip_header->saddr);	
-	printk(KERN_INFO "Receive-Interface: %s   ---   SRC-IP: %pI4   ---   DST-IP: %pI4   ---   SRC-Count: %d   ---   DST-Count: %d\n", indev->name, &ip_header->saddr, &ip_header->daddr, get_value(hmap, ip_header->saddr), get_value(hmap, ip_header->daddr));  
-	
-	
-	/*
-	call_count++;
-	ip_header = (struct iphdr *)skb_network_header(pskb);
-	insert(hmap, hmap->container, ip_header->daddr);
-	printk(KERN_INFO "Receive-Interface: %s   ---   SRC-IP: %pI4   ---   DST-IP: %pI4   ---   Call-Count: %d\n", indev->name, &ip_header->saddr, &ip_header->daddr, call_count);  
-	*/
-
-	/*   
-	printk(KERN_INFO "Send-Interface: %s   ---   SRC-IP: %pI4   ---   DST-IP: %pI4   ---   Packet-Count: %d\n", outdev->name, &ip_header->saddr, &ip_header->daddr, get_value(hmap, ip_header->daddr));  
-   	*/
-
-	printk(KERN_INFO "------------------------------------\n");
+	insert_ip(ip_header->daddr);
+	//printk(KERN_INFO "------------------------------------\n");
 
 	return NF_ACCEPT;  //accepts the packet        
 }
@@ -109,18 +54,10 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 //Called when module loaded using 'insmod'
 int init_module()
 {
-	/*
-	array_size = 13;
-	item_count = 0;
-	map = vmalloc(sizeof(map_t*)*array_size);
-  	*/
 
-	hmap = kmalloc(sizeof(hash_map_t), GFP_ATOMIC); 
-    	hmap->map_size = INITIAL_SIZE;
-    	hmap->entry_count = 0;
-    	hmap->container = kmalloc(sizeof(hash_map_entry_t*) * INITIAL_SIZE, GFP_ATOMIC);
-	insert_count = 0;
-	call_count = 0;
+	global_map = (struct hlist_head**)kmalloc(sizeof(struct hlist_head*)*GLOBAL_MAP_SIZE, GFP_KERNEL);
+	for(int i = 0; i < GLOBAL_MAP_SIZE; i++)
+		global_map[i] = NULL;
 
 	nfho.hook = packet_interceptor_hook;  //function to call when conditions below met
 	nfho.hooknum = 0;  //called right after packet recieved, first hook in Netfilter
@@ -128,337 +65,71 @@ int init_module()
 	nfho.priority = NF_IP_PRI_FIRST;  //set to highest priority over all other hook functions
 	nf_register_hook(&nfho);  //register hook
 	
-	//printk(KERN_INFO "Running on interface %s for %ds\n", iface, run_time);
+
+	//test
+	insert_ip(1);
+	//insert_ip(2);
+
 	return 0;  //return 0 for successi
 }
 
 //Called when module unloaded using 'rmmod'
 void cleanup_module()
 {
+	print_all();
 	nf_unregister_hook(&nfho);  //cleanup – unregister hook
-	//free_hash_map(hmap);
 }
 
-/*
-void free_hash()
-{
-	//delete hash table stuff
-	for(int i = 0; i < array_size; i++)
-	{
-		vfree(map[i]);
-	}
-	vfree(map);
-}
-
-int get_count(unsigned int dstip)
-{
-	int index = dstip%array_size;
-	while(map[index] && map[index]->dst != dstip)
-  	{
-		index++;
-		if(index == array_size) index = 0;
-    		if(map[index]==NULL) return -1;
-    
-  	}
-	return map[index]->count;
-}
-
-void dstlookup(unsigned int dstip)
-{
-	insert_map(map, &array_size, &item_count, dstip,0);
-	float gf = (float)item_count/array_size;
-	if(gf >= GROWTH_FACTOR)
-  	{
-		array_size *= 22;
-		map_t** newmap = vmalloc(sizeof(map_t*)*array_size);
-		int i;
-    		int temp_item_ct = 0;
-    		for(i = 0; i < array_size/2; i++)
-		{
-        		if(map[i])
-	  			insert_map(newmap, &array_size, &temp_item_ct,map[i]->dst,map[i]->count); 
-    		}
-    		vfree(map);
-    		map = newmap;
-  	}
-}
-
-
-void insert_map(map_t** mp, int* size, int* itemc, unsigned int dstip, int set_count)
-{
-	int index = dstip % *size;
-  
-	if(mp[index])
-	{
-		while(mp[index] && mp[index++]->dst != dstip)
-        		if(index == *size) index = 0;
-
-		if(mp[index]) 
-			mp[index]->count++;
-    		else
-    		{
-        		mp[index] = vmalloc(sizeof(map_t));
-        		mp[index]->dst = dstip;
-        		mp[index]->count = 1;
-        		*itemc++;
-    		}
-	}		
-	else
-	{
-		mp[index] = vmalloc(sizeof(map_t));
-    		mp[index]->dst = dstip;
-    		mp[index]->count = 1;
-    		*itemc++;
-  	}
-	if(set_count !=0) mp[index]->count = set_count;
-}
-*/
-
-
-void free_hash_map(hash_map_t* hmap)
-{
-    if(hmap)
-    {
-    	int i;
-    	for(i = 0; i < hmap->map_size; ++i)
-    	{
-		if(hmap->container[i])
-		{
-			kfree(hmap->container[i]);
-		}
-    	}
-	if(hmap)
-	{
-		kfree(hmap);
-	}
-    }
-}
-
-void free_hash_container(hash_map_t* hmap, int size)
-{
-	if(hmap)
-	{	
-		int i;
-		for(i = 0; i < size; ++i)
-		{
-			if(hmap->container[i])
-			{
-				kfree(hmap->container[i]);
+void insert_ip(unsigned int ip){
+	unsigned int iphash = hash_32(ip, 10);//10 bits in 1024
+	if(global_map[iphash]){
+		struct hlist_node* n;
+		hte_t* h;
+		hlist_for_each_entry(h, n, global_map[iphash], node){
+			if(h->addr == ip){
+				h->count++;
+				return;
 			}
 		}
-	}		
+		hte_t* add_new = __make_hte(ip,1);
+		hlist_add_after(&h->node, &add_new->node);
+	}
+	else{
+		hte_t* new = __make_hte(ip, 1);
+		global_map[iphash] = kmalloc(sizeof(struct hlist_head), GFP_KERNEL);
+		INIT_HLIST_HEAD(global_map[iphash]);
+		INIT_HLIST_NODE(&new->node);
+		hlist_add_head(&new->node, global_map[iphash]);
+
+	}
 }
 
-void regrow(hash_map_t* hmap)
-{
-    if(!hmap)
-	return;
 
-    float load = ((float)hmap->entry_count)/hmap->map_size;
-    
-    if(load > LOAD_FACTOR)
-    {
-	int old_size = hmap->map_size;
-	hmap->map_size *= REGROW_FACTOR;
-	hmap->entry_count = 0;
-	hash_map_entry_t** new_container = kmalloc(sizeof(hash_map_entry_t*) * hmap->map_size, GFP_ATOMIC);
-	
+hte_t* __make_hte(unsigned int addr, unsigned int count){
+	hte_t* new = (hte_t*)kmalloc(sizeof(hte_t), GFP_KERNEL);
+	new->addr = addr;
+	new->count = count;
+
+	return new;
+}
+
+void print_all(){
 	int i;
-	for(i = 0; i < old_size; ++i)
-	{
-	    if(hmap->container[i])
-	    {
-		insert(hmap, new_container, hmap->container[i]->key);
-	    }
+	hte_t* h;
+	struct hlist_node* n;
+
+	for(i = 0; i < GLOBAL_MAP_SIZE; i++){
+		if(global_map[i]){
+			/*
+			if(!hlist_empty(global_map[i])){
+				hlist_for_each_entry(h, n, global_map[i], node){
+					if(h)
+						printk("IP: %pI4 - count: %d", h->addr, h->count);
+					h = NULL;
+				}
+			}
+			*/
+			printk("first ip - %d first count - %d\n", hlist_entry(global_map[i]->first, hte_t, node)->addr,hlist_entry(global_map[i]->first, hte_t, node)->count);
+		}
 	}
-	
-	free_hash_container(hmap, old_size);
-	hmap->container = new_container;
-    }
 }
-
-void insert(hash_map_t* hmap, hash_map_entry_t** container, unsigned int key)
-{
-    insert_count++;
-	
-    if(!hmap || !container)
-	return;
-
-    printk(KERN_INFO "map_size: %d     entry_count: %d     dst ip: %u\n", hmap->map_size, hmap->entry_count, key);
-	
-    int index = key % hmap->map_size;
-	
-    if(index >= hmap->map_size)
-	return;
-
-    int old_index = index;
-    hash_map_entry_t* hmentry = container[index];       
-
-    if(hmentry)
-    {
-	  while(hmentry && hmentry->key != key)
-	  {
-		++index;
-		if(index < hmap->map_size)
-			hmentry = container[index];
-		else
-			break;
-	  }
-	  
-	  if(hmentry)
-	  {
-	      if(hmentry->key == key)
-	      {
-		  hmentry->value++;
-	      }
-	      else
-	      {
-		  index = 0;
-		  
-		  while(hmentry && hmentry->key != key && index < old_index)
-		  {
-			++index;
-			hmentry = container[index];
-		  }
-		
-		  if(hmentry)
-		  {
-		      if(hmentry->key == key)
-		      {
-			  hmentry->value++;
-		      }
-		      else
-		      {
-			  hmentry = kmalloc(sizeof(hash_map_entry_t), GFP_ATOMIC);
-			  if(hmentry == NULL)
-			  {
-				printk(KERN_INFO "\t\t----------no memory to create new entry\n");
-				return; 
-			  }
-			  hmentry->key = key;
-			  hmentry->value = 1;
-			  container[index] = hmentry;
-			  hmap->entry_count++;  
-			  regrow(hmap);
-		      }
-		  }
-		  else
-		  {
-		      hmentry = kmalloc(sizeof(hash_map_entry_t), GFP_ATOMIC);
-		      if(hmentry == NULL)
-                      {   
-                             printk(KERN_INFO "\t\t----------no memory to create new entry\n");
-                             return;
-                      }
-		      hmentry->key = key;
-		      hmentry->value = 1;
-		      container[index] = hmentry;
-		      hmap->entry_count++;  
-		      regrow(hmap);
-		  }
-	      } 
-	  } 
-	  else
-	  {
-	      hmentry = kmalloc(sizeof(hash_map_entry_t), GFP_ATOMIC);
-	      if(hmentry == NULL)
-              {   
-                     printk(KERN_INFO "\t\t----------no memory to create new entry\n");
-                     return;
-              }
-	      hmentry->key = key;
-	      hmentry->value = 1;
-	      container[index] = hmentry;
-	      hmap->entry_count++; 
-	      regrow(hmap);
-	  }
-    }
-    else
-    {
-	hmentry = kmalloc(sizeof(hash_map_entry_t), GFP_ATOMIC);
-	if(hmentry == NULL)
-        {   
-             printk(KERN_INFO "\t\t----------no memory to create new entry\n");
-             return;
-        }
-	hmentry->key = key;
-	hmentry->value = 1;
-	container[index] = hmentry;
-	hmap->entry_count++; 
-	regrow(hmap);
-    }
-}
-
-int get_value(hash_map_t* hmap, unsigned int key)
-{
-    if(!hmap)
-	return 0;
-
-    int index = key % hmap->map_size;
-
-    if(index >= hmap->map_size)
-	return 0;
-
-    int old_index = index;
-    hash_map_entry_t* hmentry = hmap->container[index];
-     
-    if(hmentry)
-    {
-	  while(hmentry && hmentry->key != key && index < hmap->map_size)
-	  {
-		++index;
-		if(index < hmap->map_size)
-			hmentry = hmap->container[index];
-		else 
-			break;
-	  }
-	  
-	  if(hmentry)
-	  {
-	      if(hmentry->key == key)
-	      {
-		  return hmentry->value;
-	      }
-	      else
-	      {
-		  index = 0;
-		  
-		  while(hmentry && hmentry->key != key && index < old_index)
-		  {
-			++index;
-			hmentry = hmap->container[index];
-		  }
-		
-		  if(hmentry)
-		  {
-		      if(hmentry->key == key)
-		      {
-			  return hmentry->value;
-		      }
-		  }
-	      } 
-	  } 
-    }
-    
-    return 0;
-}
-
-void print_hash_map(hash_map_t* hmap)
-{  
-    int i;
-    for(i = 0; i < hmap->map_size; ++i)
-    {
-	if(hmap->container[i])
-	{
-	    printk(KERN_INFO "key: %u          value: %d\n", hmap->container[i]->key, hmap->container[i]->value);
-	}
-    }
-}
-
-
-
-
-
-
-
-
