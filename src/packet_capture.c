@@ -9,7 +9,8 @@
 #include <linux/init.h>
 #include <linux/hash.h>
 #include <linux/list.h>
-
+#include <linux/string.h>
+#include <linux/time.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Patrick Conner, Ho Yin Pun");
@@ -26,6 +27,11 @@ typedef struct hte{
 	unsigned int count;
 	struct hlist_node node;
 } hte_t;
+
+struct timespec* ts;
+
+long end_s;//end time, in seconds
+
 hte_t* __make_hte(unsigned int addr, unsigned int count);
 void insert_ip(unsigned int ip);
 
@@ -33,6 +39,8 @@ void print_all(void);
 static struct nf_hook_ops nfho;  //struct holding set of hook function options
 
 static struct iphdr *ip_header;
+int in_time_limit(void);
+
 
 #define GLOBAL_MAP_SIZE 1024
 struct hlist_head** global_map;
@@ -43,11 +51,23 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 	const struct net_device *outdev, 
 	int (*okfn)(struct sk_buff *))
 {
-	
- 	ip_header = (struct iphdr *)skb_network_header(pskb);
-	insert_ip(ip_header->daddr);
-	//printk(KERN_INFO "------------------------------------\n");
-
+	if(strcmp(iface, indev->name) == 0){
+		if(/*in_time_limit()==*/1){	
+	 		ip_header = (struct iphdr *)skb_network_header(pskb);
+			insert_ip(ip_header->daddr);
+			insert_ip(ip_header->saddr);
+			//printk(KERN_INFO "------------------------------------\n");
+			//printk("in iface: %s - out iface: %s \n", indev->if_port, outdev->if_port);
+			/*
+			if(indev->name) printk("input iface: %s ", indev->name);
+			if(outdev->name) printk("output iface: %s ", outdev->name);
+			printk("\n");
+			*/
+		}
+		else{
+			printk("END OF PACKET CAPTURE TIME \n");
+		}
+	}
 	return NF_ACCEPT;  //accepts the packet        
 }
 
@@ -58,7 +78,10 @@ int init_module()
 	global_map = (struct hlist_head**)kmalloc(sizeof(struct hlist_head*)*GLOBAL_MAP_SIZE, GFP_KERNEL);
 	for(int i = 0; i < GLOBAL_MAP_SIZE; i++)
 		global_map[i] = NULL;
-
+	//getnstimeofday(ts);
+	//if(ts)
+	//	end_s = ts->tv_sec + run_time;
+	
 	nfho.hook = packet_interceptor_hook;  //function to call when conditions below met
 	nfho.hooknum = 0;  //called right after packet recieved, first hook in Netfilter
 	nfho.pf = PF_INET;  //IPV4 packets
@@ -67,9 +90,10 @@ int init_module()
 	
 
 	//test
-	insert_ip(1);
+	//insert_ip(1);
 	//insert_ip(2);
-
+	//if(ts)
+	//	printk("starting packet capture at system time %ld\n", ts->tv_sec);
 	return 0;  //return 0 for successi
 }
 
@@ -78,6 +102,16 @@ void cleanup_module()
 {
 	print_all();
 	nf_unregister_hook(&nfho);  //cleanup – unregister hook
+	//TODO - cleanup hash table
+}
+
+
+int in_time_limit(){
+	getnstimeofday(ts);
+	if(ts->tv_sec <= end_s)		
+		return 1;
+	printk("Ending at system time %ld\n", ts->tv_sec);
+	return 0;
 }
 
 void insert_ip(unsigned int ip){
