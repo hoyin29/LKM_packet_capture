@@ -133,7 +133,8 @@ void cleanup_module()
 				h = hlist_entry(n,hte_t, node);
 				old = n;
 				n = n->next;
-				kfree(old);
+				hlist_del(old);
+				//kfree(old);
 				kfree(h);
 			}
 			kfree(global_map[i]);
