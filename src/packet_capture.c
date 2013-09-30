@@ -45,6 +45,8 @@ int in_time_limit(void);
 #define GLOBAL_MAP_SIZE 1024
 struct hlist_head** global_map;
 
+int done = 0;
+
 static unsigned int packet_interceptor_hook(unsigned int hook, 
 	struct sk_buff *pskb, 
 	const struct net_device *indev, 
@@ -52,12 +54,13 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 	int (*okfn)(struct sk_buff *))
 {
 	if(strcmp(iface, indev->name) == 0){
-		if(/*in_time_limit()==*/1){	
+		if(in_time_limit()==1){	
 	 		ip_header = (struct iphdr *)skb_network_header(pskb);
 			insert_ip(ip_header->daddr);
 			insert_ip(ip_header->saddr);
 			//printk(KERN_INFO "------------------------------------\n");
 			//printk("in iface: %s - out iface: %s \n", indev->if_port, outdev->if_port);
+
 			/*
 			if(indev->name) printk("input iface: %s ", indev->name);
 			if(outdev->name) printk("output iface: %s ", outdev->name);
@@ -65,7 +68,13 @@ static unsigned int packet_interceptor_hook(unsigned int hook,
 			*/
 		}
 		else{
-			printk("END OF PACKET CAPTURE TIME \n");
+			if(!done){
+
+				printk("END OF PACKET CAPTURE TIME \n");
+				//cleanup_module();
+				done = 1;
+				printk("run 'sudo rmmod packet_capture' to see results in kernel log \n");
+			}
 		}
 	}
 	return NF_ACCEPT;  //accepts the packet        
@@ -78,9 +87,10 @@ int init_module()
 	global_map = (struct hlist_head**)kmalloc(sizeof(struct hlist_head*)*GLOBAL_MAP_SIZE, GFP_KERNEL);
 	for(int i = 0; i < GLOBAL_MAP_SIZE; i++)
 		global_map[i] = NULL;
-	//getnstimeofday(ts);
-	//if(ts)
-	//	end_s = ts->tv_sec + run_time;
+	ts = kmalloc(sizeof(struct timespec), GFP_KERNEL);
+	getnstimeofday(ts);
+	if(ts)
+		end_s = ts->tv_sec + run_time;
 	
 	nfho.hook = packet_interceptor_hook;  //function to call when conditions below met
 	nfho.hooknum = 0;  //called right after packet recieved, first hook in Netfilter
@@ -92,8 +102,8 @@ int init_module()
 	//test
 	//insert_ip(1);
 	//insert_ip(2);
-	//if(ts)
-	//	printk("starting packet capture at system time %ld\n", ts->tv_sec);
+	if(ts)
+		printk("starting packet capture at system time %ld\n", ts->tv_sec);
 	return 0;  //return 0 for successi
 }
 
@@ -110,7 +120,8 @@ int in_time_limit(){
 	getnstimeofday(ts);
 	if(ts->tv_sec <= end_s)		
 		return 1;
-	printk("Ending at system time %ld\n", ts->tv_sec);
+	if(!done)
+		printk("Ending at system time %ld\n", ts->tv_sec);
 	return 0;
 }
 
