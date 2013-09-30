@@ -113,6 +113,34 @@ void cleanup_module()
 	print_all();
 	nf_unregister_hook(&nfho);  //cleanup – unregister hook
 	//TODO - cleanup hash table
+	kfree(ts);
+	int i;
+	for(i = 0; i < GLOBAL_MAP_SIZE; i++){
+		if(global_map[i]){
+			struct hlist_node* n;
+			struct hlist_node* old;
+			hte_t* h;
+			/*
+			hlist_for_each(n, global_map[i]){
+				h = hlist_entry(h, hte_t, node);
+				hlist_del(n);
+				//if(h) kfree(h);
+				//kfree(n);
+			}
+			*/
+			n = global_map[i]->first;
+			while(n){
+				h = hlist_entry(n,hte_t, node);
+				old = n;
+				n = n->next;
+				kfree(old);
+				kfree(h);
+			}
+			kfree(global_map[i]);
+				
+		}
+	}
+	kfree(global_map);
 }
 
 
